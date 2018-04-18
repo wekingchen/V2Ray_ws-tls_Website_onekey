@@ -34,10 +34,11 @@ hostheader=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
 
 source /etc/os-release
 
-#脚本欢迎语
+#脚本欢迎语 添加脚本别名
 v2ray_hello(){
 	echo ""
 	echo -e "${Info} ${GreenBG} 你正在执行 V2RAY 基于 NGINX 的 VMESS+WS+TLS+Website(Use Host)+Rinetd BBR 一键安装脚本 ${Font}"
+	alias v="bash v.sh"
 	echo ""
 }
 
@@ -259,9 +260,7 @@ v2ray_install(){
 	fi
 
 	mkdir -p /root/v2ray && cd /root/v2ray
-	wget  --no-check-certificate https://install.direct/go.sh
-
-	## wget http://install.direct/go.sh
+	wget -N --no-check-certificate https://install.direct/go.sh
 	
 	if [[ -f go.sh ]];then
 		bash go.sh --force
@@ -433,35 +432,25 @@ user_config_add(){
 		]
 	},
 	"inbound": {
-		"port": 1080,
-		"listen": "0.0.0.0",
-		"protocol": "socks",
-		"domainOverride": [
-			"tls",
-			"http"
-		],
-		"settings": {
-			"ip": "127.0.0.1",
-			"udp": true,
-			"auth": "noauth",
-			"timeout": 600
-		}
-	},
-	"inboundDetour": {
-		"port": 1080,
-		"listen": "0.0.0.0",
+		"port": 1087,
+		"listen": "127.0.0.1",
 		"protocol": "http",
-		"domainOverride": [
-			"tls",
-			"http"
-		],
 		"settings": {
-			"ip": "127.0.0.1",
-			"udp": true,
-			"auth": "noauth",
 			"timeout": 600
 		}
 	},
+	"inboundDetour": [
+		{
+			"port": 1080,
+			"listen": "127.0.0.1",
+			"protocol": "socks",
+			"settings": {
+				"auth": "noauth",
+				"timeout": 600,
+				"udp": true
+			}
+		}
+	],
 	"outbound": {
 		"tag": "agentout",
 		"protocol": "vmess",
@@ -694,9 +683,11 @@ show_information(){
 	if [ "${port}" -eq "443" ];then
 	echo -e "${Green} Website 伪装站点：${Font} https://${domain} "
 	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font} "
+	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font} "
 	else
 	echo -e "${Green} Website 伪装站点：${Font} https://${domain}:${port} "
 	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}:${port}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font} "
+	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}:${port}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font} "
 	fi
 	echo -e "----------------------------------------------------------"
 }
@@ -723,6 +714,7 @@ main_sslon(){
 	nginx_conf_add
 	user_config_add
 	rinetdbbr_install
+	win64_v2ray
 	show_information
 	start_process_systemd
 }
@@ -747,6 +739,7 @@ main_ssloff(){
 	nginx_conf_add
 	user_config_add
 	rinetdbbr_install
+	win64_v2ray
 	show_information
 	start_process_systemd
 }
@@ -821,6 +814,25 @@ share_uuid(){
 	sed -i "s/<\/body>/<\/body><div style=\"color:#666666;\"><br\/><br\/><p align=\"center\">UUID:${SHAREUUID}<\/p><br\/><\/div>/g" "/www/index.html"
 	systemctl restart v2ray
 	echo -e "${OK} ${GreenBG} 执行 UUID 更换任务成功，请访问 Website 首页查看新的 UUID ${Font}"
+}
+
+#生成Windows客户端
+win64_v2ray(){
+	${INS} install unzip zip -y
+	echo -e "${OK} ${GreenBG} 正在生成Windows客户端 ${Font}"
+	TAG_URL="https://api.github.com/repos/v2ray/v2ray-core/releases/latest"
+	NEW_VER=`curl -s ${TAG_URL} --connect-timeout 10| grep 'tag_name' | cut -d\" -f4`
+	wget https://github.com/dylanbai8/V2Ray_ws-tls_Website_onekey/raw/master/V2rayPro.zip
+	wget https://github.com/v2ray/v2ray-core/releases/download/${NEW_VER}/v2ray-windows-64.zip
+	unzip V2rayPro.zip
+	unzip v2ray-windows-64.zip
+	rm -rf V2rayPro.zip v2ray-windows-64.zip
+	mv ./V2rayPro/v2ray/wv2ray-service.exe ./v2ray-${NEW_VER}-windows-64
+	rm -rf ./V2rayPro/v2ray
+	mv ./v2ray-${NEW_VER}-windows-64 ./V2rayPro/v2ray
+	cp -rp ${v2ray_user} ./V2rayPro/v2ray/config.json
+	zip -q -r /www/s/${camouflage}/V2rayPro.zip ./V2rayPro
+	rm -rf ./V2rayPro
 }
 
 #Bash执行选项
