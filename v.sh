@@ -28,17 +28,16 @@ v2ray_conf="${v2ray_conf_dir}/config.json"
 v2ray_user="${v2ray_conf_dir}/user.json"
 nginx_conf="${nginx_conf_dir}/v2ray.conf"
 
-#生成伪装路径
-camouflage=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
-hostheader=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
-
 source /etc/os-release
 
-#脚本欢迎语 添加脚本别名
+#脚本欢迎语 生成 转发端口 UUID 随机路径 伪装域名
 v2ray_hello(){
 	echo ""
 	echo -e "${Info} ${GreenBG} 你正在执行 V2RAY 基于 NGINX 的 VMESS+WS+TLS+Website(Use Host)+Rinetd BBR 一键安装脚本 ${Font}"
-	alias v="bash v.sh"
+	let PORT=$RANDOM+10000
+	UUID=$(cat /proc/sys/kernel/random/uuid)
+	camouflage=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
+	hostheader=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
 	echo ""
 }
 
@@ -150,8 +149,6 @@ apache_uninstall(){
 	echo -e "${Info} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
 
 	yum -y update
-	
-	rm -rf /www
 
 	else
 
@@ -170,10 +167,13 @@ apache_uninstall(){
 	echo -e "${Info} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
 
 	apt -y update
-	
-	rm -rf /www
 
 	fi
+
+	rm -rf /www >/dev/null 2>&1
+	rm -rf /etc/v2ray/config.json >/dev/null 2>&1
+	rm -rf /etc/v2ray/user.json >/dev/null 2>&1
+	rm -rf /etc/nginx/conf.d/v2ray.conf >/dev/null 2>&1
 }
 
 #安装各种依赖工具
@@ -346,14 +346,14 @@ v2ray_conf_add(){
 	cat>${v2ray_conf_dir}/config.json<<EOF
 {
   "inbound": {
-	"port": 10000,
+	"port": SETPORTV,
 	"listen": "127.0.0.1",
 	"protocol": "vmess",
 	"settings": {
 	  "clients": [
 		{
-		  "id": "UserUUID",
-		  "alterId": 64
+		  "id": "SETUUID",
+		  "alterId": SETALTERID
 		}
 	  ]
 	},
@@ -362,7 +362,7 @@ v2ray_conf_add(){
 	  "wsSettings": {
 	  "path": "/",
 	  "headers": {
-	  "Host": "www.PathHeader.com"
+	  "Host": "www.SETHEADER.com"
 	  }
 	  }
 	}
@@ -383,12 +383,12 @@ nginx_conf_add(){
 	touch ${nginx_conf_dir}/v2ray.conf
 	cat>${nginx_conf_dir}/v2ray.conf<<EOF
 	server {
-		listen 443 ssl http2;
+		listen SETPORT443 ssl http2;
 		ssl_certificate		/etc/v2ray/v2ray.crt;
 		ssl_certificate_key	/etc/v2ray/v2ray.key;
 		ssl_protocols		TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
 		ssl_ciphers			HIGH:!aNULL:!MD5;
-		server_name			serveraddr.com;
+		server_name			SETSERVER.COM;
 		root		/www;
 		location / {
 		proxy_redirect off;
@@ -396,15 +396,15 @@ nginx_conf_add(){
 		proxy_set_header Upgrade \$http_upgrade;
 		proxy_set_header Connection "upgrade";
 		proxy_set_header Host \$http_host;
-		if (\$http_host = "www.PathHeader.com" ) {
-		proxy_pass http://127.0.0.1:10000;
+		if (\$http_host = "www.SETHEADER.com" ) {
+		proxy_pass http://127.0.0.1:SETPORTV;
 		}
 		}
 	}
 	server {
-		SETPORT80;
-		server_name serveraddr.com;
-		SETREWRITE;
+		listen 80;
+		server_name SETSERVER.COM;
+		return 301 https://SETSERVER.COM:SETPORT443;
 	}
 EOF
 
@@ -464,19 +464,19 @@ user_config_add(){
 			"wsSettings": {
 				"path": "/",
 				"headers": {
-					"host": "SETPATH"
+					"host": "SETHEADER"
 				}
 			}
 		},
 		"settings": {
 			"vnext": [
 				{
-					"port": SETPORT,
-					"address": "SETDOMAIN",
+					"port": SETPORT443,
+					"address": "SETSERVER",
 					"users": [
 						{
-							"alterId": SETAID,
-							"id": "SETID"
+							"alterId": SETALTERID,
+							"id": "SETUUID"
 						}
 					]
 				}
@@ -569,31 +569,27 @@ judge "客户端json配置"
 
 #修正v2ray配置文件
 modify_port_UUID(){
-	let PORT=$RANDOM+10000
-	UUID=$(cat /proc/sys/kernel/random/uuid)
-	sed -i "/\"port\"/c  \	\"port\":${PORT}," ${v2ray_conf}
-	sed -i "/\"id\"/c \\\t  \"id\":\"${UUID}\"," ${v2ray_conf}
-	sed -i "/\"alterId\"/c \\\t  \"alterId\":${alterID}" ${v2ray_conf}
-	sed -i "s/PathHeader/${hostheader}/g" "${v2ray_conf}"
+	sed -i "s/SETPORTV/${PORT}/g" "${v2ray_conf}"
+	sed -i "s/SETUUID/${UUID}/g" "${v2ray_conf}"
+	sed -i "s/SETALTERID/${alterID}/g" "${v2ray_conf}"
+	sed -i "s/SETHEADER/${hostheader}/g" "${v2ray_conf}"
 }
 
 #修正nginx配置配置文件
 modify_nginx(){
-	sed -i "1,/listen/{s/listen 443 ssl;/listen ${port} ssl;/}" ${nginx_conf}
-	sed -i "/server_name/c \\\tserver_name ${domain};" ${nginx_conf}
-	sed -i "/proxy_pass/c \\\tproxy_pass http://127.0.0.1:${PORT};" ${nginx_conf}
-	sed -i "s/PathHeader/${hostheader}/g" "${nginx_conf}"
-	sed -i "s/SETPORT80/listen 80/g" "${nginx_conf}"
-	sed -i "s/SETREWRITE/return 301 https:\/\/\$host\/\$request_uri/g" "${nginx_conf}"
+	sed -i "s/SETPORT443/${port}/g" "${nginx_conf}"
+	sed -i "s/SETPORTV/${PORT}/g" "${nginx_conf}"
+	sed -i "s/SETSERVER.COM/${domain}/g" "${nginx_conf}"
+	sed -i "s/SETHEADER/${hostheader}/g" "${nginx_conf}"
 }
 
 #修正客户端json配置文件
 modify_userjson(){
-	sed -i "s/SETDOMAIN/${domain}/g" "${v2ray_user}"
-	sed -i "s/SETPORT/${port}/g" "${v2ray_user}"
-	sed -i "s/SETID/${UUID}/g" "${v2ray_user}"
-	sed -i "s/SETAID/${alterID}/g" "${v2ray_user}"
-	sed -i "s/SETPATH/www.${hostheader}.com/g" "${v2ray_user}"
+	sed -i "s/SETSERVER/${domain}/g" "${v2ray_user}"
+	sed -i "s/SETPORT443/${port}/g" "${v2ray_user}"
+	sed -i "s/SETUUID/${UUID}/g" "${v2ray_user}"
+	sed -i "s/SETALTERID/${alterID}/g" "${v2ray_user}"
+	sed -i "s/SETHEADER/www.${hostheader}.com/g" "${v2ray_user}"
 }
 
 #安装bbr端口加速
@@ -770,16 +766,16 @@ if [[ -e /www/index.bak ]]; then
 else
 	NEWUUID=$(cat /proc/sys/kernel/random/uuid)
 	newcamouflage=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
-	sed -i "/\"id\"/c \\\t  \"id\":\"${NEWUUID}\"," ${v2ray_conf}
-	sed -i "/\"id\"/c \\\t  \"id\":\"${NEWUUID}\"" ${v2ray_user}
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_conf}"
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_user}"
 	rm -rf /www/s
 	mkdir /www/s
 	mkdir /www/s/${newcamouflage}
 	cp -rp ${v2ray_user} /www/s/${newcamouflage}/config.json
 	systemctl restart v2ray
-	judge "重启 V2ray 进程 重新载入配置文件"
-	echo -e "${Info} ${GreenBG} 新的 用户id（UUID）: ${NEWUUID} ${Font} "
-	echo -e "${Info} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${newcamouflage}/config.json ${Font} "
+	judge "重启V2ray进程载入新的配置文件"
+	echo -e "${OK} ${GreenBG} 新的 用户id（UUID）: ${NEWUUID} ${Font} "
+	echo -e "${OK} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${newcamouflage}/config.json ${Font} "
 fi
 }
 
@@ -810,7 +806,7 @@ share_uuid(){
 	SHAREUUID=$(cat /proc/sys/kernel/random/uuid)
 	rm -f /www/index.html
 	cp -rp /www/index.bak /www/index.html
-	sed -i "/\"id\"/c \\\t  \"id\":\"${NEWUUID}\"," ${v2ray_conf}
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_conf}"
 	sed -i "s/<\/body>/<\/body><div style=\"color:#666666;\"><br\/><br\/><p align=\"center\">UUID:${SHAREUUID}<\/p><br\/><\/div>/g" "/www/index.html"
 	systemctl restart v2ray
 	echo -e "${OK} ${GreenBG} 执行 UUID 更换任务成功，请访问 Website 首页查看新的 UUID ${Font}"
