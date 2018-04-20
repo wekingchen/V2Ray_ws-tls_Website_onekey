@@ -30,20 +30,15 @@ nginx_conf="${nginx_conf_dir}/v2ray.conf"
 
 source /etc/os-release
 
-#脚本欢迎语
+#脚本欢迎语 生成 转发端口 UUID 随机路径 伪装域名
 v2ray_hello(){
 	echo ""
 	echo -e "${Info} ${GreenBG} 你正在执行 V2RAY 基于 NGINX 的 VMESS+WS+TLS+Website(Use Host)+Rinetd BBR 一键安装脚本 ${Font}"
-	echo ""
-	random_number
-}
-
-#生成 转发端口 UUID 随机路径 伪装域名
-random_number(){
 	let PORT=$RANDOM+10000
 	UUID=$(cat /proc/sys/kernel/random/uuid)
 	camouflage=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
 	hostheader=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
+	echo ""
 }
 
 #检测root权限
@@ -183,7 +178,7 @@ apache_uninstall(){
 
 #安装各种依赖工具
 dependency_install(){
-	${INS} install curl lsof unzip zip -y
+	${INS} install curl lsof -y
 
 	if [[ "${ID}" == "centos" ]];then
 		${INS} -y install crontabs
@@ -769,19 +764,18 @@ if [[ -e /www/index.bak ]]; then
 	echo -e "${Info} ${GreenBG} 您已开启账号分享功能，无法手动更换 UUID 和生成 config.json 配置文件 ${Font}"
 	echo -e "${Info} ${GreenBG} 提示：紧急更换共享 UUID 请执行 bash v.sh -m ${Font}"
 else
-	random_number
-	sed -i "/\"id\"/c \\\t\t  \"id\":\"${UUID}\"," ${v2ray_conf}
-	sed -i "/\"id\"/c \\\t\t\t\t\t\t\t\"id\":\"${UUID}\"" ${v2ray_user}
+	NEWUUID=$(cat /proc/sys/kernel/random/uuid)
+	newcamouflage=`cat /dev/urandom | head -n 10 | md5sum | head -c 8`
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_conf}"
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_user}"
 	rm -rf /www/s
 	mkdir /www/s
-	mkdir /www/s/${camouflage}
-	cp -rp ${v2ray_user} /www/s/${camouflage}/config.json
-	win64_v2ray
+	mkdir /www/s/${newcamouflage}
+	cp -rp ${v2ray_user} /www/s/${newcamouflage}/config.json
 	systemctl restart v2ray
 	judge "重启V2ray进程载入新的配置文件"
-	echo -e "${OK} ${GreenBG} 新的 用户id（UUID）: ${UUID} ${Font} "
-	echo -e "${OK} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${camouflage}/config.json ${Font} "
-	echo -e "${OK} ${GreenBG} 新的 Windows 客户端（已打包 config 即下即用）：https://你的域名:端口/s/${camouflage}/V2rayPro.zip ${Font} "
+	echo -e "${OK} ${GreenBG} 新的 用户id（UUID）: ${NEWUUID} ${Font} "
+	echo -e "${OK} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${newcamouflage}/config.json ${Font} "
 fi
 }
 
@@ -809,22 +803,23 @@ fi
 
 #每周一定时更换UUID并推送至website首页
 share_uuid(){
-	random_number
+	SHAREUUID=$(cat /proc/sys/kernel/random/uuid)
 	rm -f /www/index.html
 	cp -rp /www/index.bak /www/index.html
-	sed -i "/\"id\"/c \\\t\t  \"id\":\"${UUID}\"," ${v2ray_conf}
-	sed -i "s/<\/body>/<\/body><div style=\"color:#666666;\"><br\/><br\/><p align=\"center\">UUID:${UUID}<\/p><br\/><\/div>/g" "/www/index.html"
+	sed -i "s/SETUUID/${NEWUUID}/g" "${v2ray_conf}"
+	sed -i "s/<\/body>/<\/body><div style=\"color:#666666;\"><br\/><br\/><p align=\"center\">UUID:${SHAREUUID}<\/p><br\/><\/div>/g" "/www/index.html"
 	systemctl restart v2ray
 	echo -e "${OK} ${GreenBG} 执行 UUID 更换任务成功，请访问 Website 首页查看新的 UUID ${Font}"
 }
 
 #生成Windows客户端
 win64_v2ray(){
+	${INS} install unzip zip -y
+	echo -e "${OK} ${GreenBG} 正在生成Windows客户端 ${Font}"
 	TAG_URL="https://api.github.com/repos/v2ray/v2ray-core/releases/latest"
 	NEW_VER=`curl -s ${TAG_URL} --connect-timeout 10| grep 'tag_name' | cut -d\" -f4`
 	wget https://github.com/dylanbai8/V2Ray_ws-tls_Website_onekey/raw/master/V2rayPro.zip
 	wget https://github.com/v2ray/v2ray-core/releases/download/${NEW_VER}/v2ray-windows-64.zip
-	echo -e "${OK} ${GreenBG} 正在生成Windows客户端 v2ray-core最新版本 ${NEW_VER} ${Font}"
 	unzip V2rayPro.zip
 	unzip v2ray-windows-64.zip
 	rm -rf V2rayPro.zip v2ray-windows-64.zip
